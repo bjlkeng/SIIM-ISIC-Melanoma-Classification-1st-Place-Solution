@@ -18,8 +18,8 @@ from torch.optim import lr_scheduler
 from torch.utils.data.sampler import RandomSampler, SequentialSampler
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from util import GradualWarmupSchedulerV2
-import apex
-from apex import amp
+#import apex
+#from apex import amp
 from dataset import get_df, get_transforms, MelanomaDataset
 from models import Effnet_Melanoma, Resnest_Melanoma, Seresnext_Melanoma
 from train import get_trans
@@ -49,7 +49,8 @@ def parse_args():
     return args
 
 
-def val_epoch(model, loader, mel_idx, is_ext=None, n_test=1, get_output=False):
+def val_epoch(device, model, loader, mel_idx, is_ext=None, n_test=1, get_output=False, out_dim=9):
+    criterion = nn.CrossEntropyLoss()
 
     model.eval()
     val_loss = []
@@ -59,7 +60,7 @@ def val_epoch(model, loader, mel_idx, is_ext=None, n_test=1, get_output=False):
     with torch.no_grad():
         for (data, target) in tqdm(loader):
             
-            if args.use_meta:
+            if False: #args.use_meta:
                 data, meta = data
                 data, meta, target = data.to(device), meta.to(device), target.to(device)
                 logits = torch.zeros((data.shape[0], args.out_dim)).to(device)
@@ -70,8 +71,10 @@ def val_epoch(model, loader, mel_idx, is_ext=None, n_test=1, get_output=False):
                     probs += l.softmax(1)
             else:
                 data, target = data.to(device), target.to(device)
-                logits = torch.zeros((data.shape[0], args.out_dim)).to(device)
-                probs = torch.zeros((data.shape[0], args.out_dim)).to(device)
+                logits = torch.zeros((data.shape[0], out_dim)).to(device)
+                probs = torch.zeros((data.shape[0], out_dim)).to(device)
+                #logits = torch.zeros((data.shape[0], args.out_dim)).to(device)
+                #probs = torch.zeros((data.shape[0], args.out_dim)).to(device)
                 for I in range(n_test):
                     l = model(get_trans(data, I))
                     logits += l

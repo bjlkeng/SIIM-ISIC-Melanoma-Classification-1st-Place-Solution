@@ -16,8 +16,8 @@ from torch.optim import lr_scheduler
 from torch.utils.data.sampler import RandomSampler, SequentialSampler
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from util import GradualWarmupSchedulerV2
-import apex
-from apex import amp
+#import apex
+#from apex import amp
 from dataset import get_df, get_transforms, MelanomaDataset
 from models import Effnet_Melanoma, Resnest_Melanoma, Seresnext_Melanoma
 
@@ -30,11 +30,11 @@ def parse_args():
     parser.add_argument('--image-size', type=int, required=True)
     parser.add_argument('--enet-type', type=str, required=True)
     parser.add_argument('--batch-size', type=int, default=64)
-    parser.add_argument('--num-workers', type=int, default=32)
+    parser.add_argument('--num-workers', type=int, default=12)
     parser.add_argument('--init-lr', type=float, default=3e-5)
     parser.add_argument('--out-dim', type=int, default=9)
     parser.add_argument('--n-epochs', type=int, default=15)
-    parser.add_argument('--use-amp', action='store_true')
+    parser.add_argument('--use-amp', action='store_true', default=False)
     parser.add_argument('--use-meta', action='store_true')
     parser.add_argument('--DEBUG', action='store_true')
     parser.add_argument('--model-dir', type=str, default='./weights')
@@ -64,15 +64,15 @@ def train_epoch(model, loader, optimizer):
     for (data, target) in bar:
 
         optimizer.zero_grad()
-        
+
         if args.use_meta:
             data, meta = data
             data, meta, target = data.to(device), meta.to(device), target.to(device)
             logits = model(data, meta)
         else:
             data, target = data.to(device), target.to(device)
-            logits = model(data)        
-        
+            logits = model(data)
+
         loss = criterion(logits, target)
 
         if not args.use_amp:
@@ -214,9 +214,9 @@ def run(fold, df, meta_features, n_meta_features, transforms_train, transforms_v
         with open(os.path.join(args.log_dir, f'log_{args.kernel_type}.txt'), 'a') as appender:
             appender.write(content + '\n')
 
-        scheduler_warmup.step()    
+        scheduler_warmup.step()
         if epoch==2: scheduler_warmup.step() # bug workaround   
-            
+
         if auc > auc_max:
             print('auc_max ({:.6f} --> {:.6f}). Saving model ...'.format(auc_max, auc))
             torch.save(model.state_dict(), model_file)
@@ -262,7 +262,9 @@ if __name__ == '__main__':
     else:
         raise NotImplementedError()
 
-    DP = len(os.environ['CUDA_VISIBLE_DEVICES']) > 1
+    # BK: Disable Apex
+    #DP = len(os.environ['CUDA_VISIBLE_DEVICES']) > 1
+    DP = False
 
     set_seed()
 
