@@ -27,12 +27,13 @@ class Swish_Module(nn.Module):
 
 
 class Effnet_Melanoma(nn.Module):
-    def __init__(self, enet_type, out_dim, n_meta_features=0, n_meta_dim=[512, 128], pretrained=False):
+    def __init__(self, enet_type, out_dim, n_meta_features=0, n_meta_dim=[512, 128], pretrained=False, num_dropout=5):
         super(Effnet_Melanoma, self).__init__()
         self.n_meta_features = n_meta_features
         self.enet = geffnet.create_model(enet_type, pretrained=pretrained)
+        self.num_dropout = num_dropout
         self.dropouts = nn.ModuleList([
-            nn.Dropout(0.5) for _ in range(5)
+            nn.Dropout(0.5) for _ in range(self.num_dropout)
         ])
         in_ch = self.enet.classifier.in_features
         if n_meta_features > 0:

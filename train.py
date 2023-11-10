@@ -4,6 +4,8 @@ import random
 import argparse
 import numpy as np
 import pandas as pd
+import wandb
+
 from tqdm import tqdm
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import StratifiedKFold
@@ -29,19 +31,20 @@ def parse_args():
     parser.add_argument('--data-folder', type=int, required=True)
     parser.add_argument('--image-size', type=int, required=True)
     parser.add_argument('--enet-type', type=str, required=True)
-    parser.add_argument('--batch-size', type=int, default=64)
-    parser.add_argument('--num-workers', type=int, default=12)
+    parser.add_argument('--batch-size', type=int, default=32)
+    parser.add_argument('--num-workers', type=int, default=1)
     parser.add_argument('--init-lr', type=float, default=3e-5)
     parser.add_argument('--out-dim', type=int, default=9)
     parser.add_argument('--n-epochs', type=int, default=15)
     parser.add_argument('--use-amp', action='store_true', default=False)
-    parser.add_argument('--use-meta', action='store_true')
+    parser.add_argument('--use-meta', action='store_true', default=False)
     parser.add_argument('--DEBUG', action='store_true')
     parser.add_argument('--model-dir', type=str, default='./weights')
     parser.add_argument('--log-dir', type=str, default='./logs')
     parser.add_argument('--CUDA_VISIBLE_DEVICES', type=str, default='0')
     parser.add_argument('--fold', type=str, default='0,1,2,3,4')
     parser.add_argument('--n-meta-dim', type=str, default='512,128')
+    parser.add_argument('--use-warmup', action='store_true', default=False)
 
     args, _ = parser.parse_known_args()
     return args
@@ -196,9 +199,11 @@ def run(fold, df, meta_features, n_meta_features, transforms_train, transforms_v
         model, optimizer = amp.initialize(model, optimizer, opt_level="O1")
     if DP:
         model = nn.DataParallel(model)
-#     scheduler_cosine = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.n_epochs - 1)
-    scheduler_cosine = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, args.n_epochs - 1)
-    scheduler_warmup = GradualWarmupSchedulerV2(optimizer, multiplier=10, total_epoch=1, after_scheduler=scheduler_cosine)
+
+    if args.use_warmup:
+        #     scheduler_cosine = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.n_epochs - 1)
+        scheduler_cosine = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, args.n_epochs - 1)
+        scheduler_warmup = GradualWarmupSchedulerV2(optimizer, multiplier=10, total_epoch=1, after_scheduler=scheduler_cosine)
     
     print(len(dataset_train), len(dataset_valid))
 
@@ -214,8 +219,20 @@ def run(fold, df, meta_features, n_meta_features, transforms_train, transforms_v
         with open(os.path.join(args.log_dir, f'log_{args.kernel_type}.txt'), 'a') as appender:
             appender.write(content + '\n')
 
-        scheduler_warmup.step()
-        if epoch==2: scheduler_warmup.step() # bug workaround   
+        if args.use_warmup:
+            scheduler_warmup.step()
+            if epoch==2: scheduler_warmup.step() # bug workaround   
+
+
+        wandb.log({
+            "Fold": fold,
+            "Epoch": epoch,
+            "Train Loss": train_loss,
+            "Valid Loss": val_loss,
+            "Accuracy": acc,
+            "AUC": auc,
+            "AUC_20": auc_20,
+        })
 
         if auc > auc_max:
             print('auc_max ({:.6f} --> {:.6f}). Saving model ...'.format(auc_max, auc))
@@ -247,11 +264,14 @@ def main():
 
 
 if __name__ == '__main__':
+    wandb.init(project="SIIM_ISIC_Melanoma_Classification")
 
     args = parse_args()
     os.makedirs(args.model_dir, exist_ok=True)
     os.makedirs(args.log_dir, exist_ok=True)
     os.environ['CUDA_VISIBLE_DEVICES'] = args.CUDA_VISIBLE_DEVICES
+
+    wandb.config.update(vars(args))
 
     if args.enet_type == 'resnest101':
         ModelClass = Resnest_Melanoma
