@@ -175,7 +175,17 @@ def get_df(kernel_type, out_dim, data_dir, data_folder, use_meta):
     df_train['diagnosis']  = df_train['diagnosis'].apply(lambda x: x.replace('cafe-au-lait macule', 'unknown'))
     df_train['diagnosis']  = df_train['diagnosis'].apply(lambda x: x.replace('atypical melanocytic proliferation', 'unknown'))
 
-    if out_dim == 9:
+    if out_dim == 2:
+        df_train['diagnosis']  = df_train['diagnosis'].apply(lambda x: x.replace('BKL', 'unknown'))
+        df_train['diagnosis']  = df_train['diagnosis'].apply(lambda x: x.replace('nevus', 'unknown'))
+        df_train2['diagnosis'] = df_train2['diagnosis'].apply(lambda x: x.replace('NV', 'unknown'))
+        df_train2['diagnosis'] = df_train2['diagnosis'].apply(lambda x: x.replace('MEL', 'melanoma'))
+        df_train2['diagnosis'] = df_train2['diagnosis'].apply(lambda x: x.replace('DF', 'unknown'))
+        df_train2['diagnosis'] = df_train2['diagnosis'].apply(lambda x: x.replace('AK', 'unknown'))
+        df_train2['diagnosis'] = df_train2['diagnosis'].apply(lambda x: x.replace('SCC', 'unknown'))
+        df_train2['diagnosis'] = df_train2['diagnosis'].apply(lambda x: x.replace('VASC', 'unknown'))
+        df_train2['diagnosis'] = df_train2['diagnosis'].apply(lambda x: x.replace('BCC', 'unknown'))
+    elif out_dim == 9:
         df_train2['diagnosis'] = df_train2['diagnosis'].apply(lambda x: x.replace('NV', 'nevus'))
         df_train2['diagnosis'] = df_train2['diagnosis'].apply(lambda x: x.replace('MEL', 'melanoma'))
     elif out_dim == 4:

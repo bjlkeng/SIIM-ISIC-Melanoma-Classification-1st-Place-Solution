@@ -1,7 +1,8 @@
 # torch==1.5.0a0+3bbb36e
 torch
 albumentations==0.4.6
-resnest==0.0.6b20200823
+#resnest==0.0.6b20200823
+resnest==0.0.6.b20230402
 #geffnet==0.9.8
 geffnet
 #numpy==1.18.1

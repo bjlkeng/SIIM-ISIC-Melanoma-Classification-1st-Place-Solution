@@ -10,6 +10,8 @@ from tqdm import tqdm
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import StratifiedKFold
 import torch
+from torch import amp
+from torch import cuda
 from torch.utils.data import DataLoader, Dataset
 import torch.nn as nn
 import torch.nn.functional as F
@@ -19,7 +21,6 @@ from torch.utils.data.sampler import RandomSampler, SequentialSampler
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from util import GradualWarmupSchedulerV2
 #import apex
-#from apex import amp
 from dataset import get_df, get_transforms, MelanomaDataset
 from models import Effnet_Melanoma, Resnest_Melanoma, Seresnext_Melanoma
 
@@ -31,7 +32,7 @@ def parse_args():
     parser.add_argument('--data-folder', type=int, required=True)
     parser.add_argument('--image-size', type=int, required=True)
     parser.add_argument('--enet-type', type=str, required=True)
-    parser.add_argument('--batch-size', type=int, default=32)
+    parser.add_argument('--batch-size', type=int, default=48)
     parser.add_argument('--num-workers', type=int, default=1)
     parser.add_argument('--init-lr', type=float, default=3e-5)
     parser.add_argument('--out-dim', type=int, default=9)
@@ -45,6 +46,10 @@ def parse_args():
     parser.add_argument('--fold', type=str, default='0,1,2,3,4')
     parser.add_argument('--n-meta-dim', type=str, default='512,128')
     parser.add_argument('--use-warmup', action='store_true', default=False)
+    parser.add_argument('--no-use-external', action='store_true', default=False)
+    parser.add_argument('--binary-labels', action='store_true', default=False)
+    parser.add_argument('--no-pretraining', action='store_true', default=False)
+    parser.add_argument('--no-cosine', action='store_true', default=False)
 
     args, _ = parser.parse_known_args()
     return args
@@ -60,6 +65,8 @@ def set_seed(seed=0):
 
 
 def train_epoch(model, loader, optimizer):
+    if args.use_amp:
+        scaler = cuda.amp.GradScaler()
 
     model.train()
     train_loss = []
@@ -71,22 +78,32 @@ def train_epoch(model, loader, optimizer):
         if args.use_meta:
             data, meta = data
             data, meta, target = data.to(device), meta.to(device), target.to(device)
-            logits = model(data, meta)
+            if not args.use_amp:
+                logits = model(data, meta)
+                loss = criterion(logits, target)
+            else:
+                with amp.autocast(device_type='cuda', dtype=torch.float16):
+                    logits = model(data, meta)
+                    loss = criterion(logits, target)
         else:
             data, target = data.to(device), target.to(device)
-            logits = model(data)
-
-        loss = criterion(logits, target)
+            if not args.use_amp:
+                logits = model(data)
+                loss = criterion(logits, target)
+            else:
+                with amp.autocast(device_type='cuda', dtype=torch.float16):
+                    logits = model(data)
+                    loss = criterion(logits, target)
 
         if not args.use_amp:
             loss.backward()
+            if args.image_size in [896,576]:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+            optimizer.step()
         else:
-            with amp.scale_loss(loss, optimizer) as scaled_loss:
-                scaled_loss.backward()
-
-        if args.image_size in [896,576]:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
-        optimizer.step()
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
 
         loss_np = loss.detach().cpu().numpy()
         train_loss.append(loss_np)
@@ -182,7 +199,7 @@ def run(fold, df, meta_features, n_meta_features, transforms_train, transforms_v
         n_meta_features=n_meta_features,
         n_meta_dim=[int(nd) for nd in args.n_meta_dim.split(',')],
         out_dim=args.out_dim,
-        pretrained=True
+        pretrained=(not args.no_pretraining),
     )
     if DP:
         model = apex.parallel.convert_syncbn_model(model)
@@ -195,15 +212,19 @@ def run(fold, df, meta_features, n_meta_features, transforms_train, transforms_v
     model_file3 = os.path.join(args.model_dir, f'{args.kernel_type}_final_fold{fold}.pth')
 
     optimizer = optim.Adam(model.parameters(), lr=args.init_lr)
-    if args.use_amp:
-        model, optimizer = amp.initialize(model, optimizer, opt_level="O1")
+    # BK: Use Pytorch mixed precision instead
+    #if args.use_amp:
+    #    model, optimizer = amp.initialize(model, optimizer, opt_level="O1")
     if DP:
         model = nn.DataParallel(model)
 
     if args.use_warmup:
         #     scheduler_cosine = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.n_epochs - 1)
-        scheduler_cosine = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, args.n_epochs - 1)
-        scheduler_warmup = GradualWarmupSchedulerV2(optimizer, multiplier=10, total_epoch=1, after_scheduler=scheduler_cosine)
+        if args.no_cosine:
+            scheduler_warmup = GradualWarmupSchedulerV2(optimizer, multiplier=10, total_epoch=1)
+        else:
+            scheduler_cosine = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, args.n_epochs - 1)
+            scheduler_warmup = GradualWarmupSchedulerV2(optimizer, multiplier=10, total_epoch=1, after_scheduler=scheduler_cosine)
     
     print(len(dataset_train), len(dataset_valid))
 
@@ -224,15 +245,16 @@ def run(fold, df, meta_features, n_meta_features, transforms_train, transforms_v
             if epoch==2: scheduler_warmup.step() # bug workaround   
 
 
-        wandb.log({
-            "Fold": fold,
-            "Epoch": epoch,
-            "Train Loss": train_loss,
-            "Valid Loss": val_loss,
-            "Accuracy": acc,
-            "AUC": auc,
-            "AUC_20": auc_20,
-        })
+        if not args.DEBUG:
+            wandb.log({
+                "Fold": fold,
+                "Epoch": epoch,
+                "Train Loss": train_loss,
+                "Valid Loss": val_loss,
+                "Accuracy": acc,
+                "AUC": auc,
+                "AUC_20": auc_20,
+            })
 
         if auc > auc_max:
             print('auc_max ({:.6f} --> {:.6f}). Saving model ...'.format(auc_max, auc))
@@ -256,22 +278,31 @@ def main():
         args.use_meta
     )
 
+    if args.no_use_external:
+        df = df[df['is_ext'] == 0].reset_index(drop=True)
+
+    if args.binary_labels:
+        df['target'] = (df['target'] == mel_idx).astype(int)
+        assert args.out_dim == 2
+
     transforms_train, transforms_val = get_transforms(args.image_size)
 
     folds = [int(i) for i in args.fold.split(',')]
+    print(f'Folds: {folds}')
     for fold in folds:
         run(fold, df, meta_features, n_meta_features, transforms_train, transforms_val, mel_idx)
 
 
 if __name__ == '__main__':
-    wandb.init(project="SIIM_ISIC_Melanoma_Classification")
 
     args = parse_args()
     os.makedirs(args.model_dir, exist_ok=True)
     os.makedirs(args.log_dir, exist_ok=True)
     os.environ['CUDA_VISIBLE_DEVICES'] = args.CUDA_VISIBLE_DEVICES
 
-    wandb.config.update(vars(args))
+    if not args.DEBUG:
+        wandb.init(project="SIIM_ISIC_Melanoma_Classification")
+        wandb.config.update(vars(args))
 
     if args.enet_type == 'resnest101':
         ModelClass = Resnest_Melanoma
