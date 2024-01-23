@@ -34,18 +34,29 @@
 
 #python train.py --fold 0,1,2 --kernel-type run19 --data-dir ./data/ --data-folder 512 --image-size 384 --enet-type efficientnet_b4 --use-warmup --init-lr 3e-5 
 
-
-python train.py --fold 0,1,2 --kernel-type run20 --data-dir ./data/ --data-folder 512 --image-size 384 --enet-type efficientnet_b3 --use-warmup --init-lr 3e-5 --no-pretraining
-
-python train.py --fold 0,1,2 --kernel-type run21 --data-dir ./data/ --data-folder 512 --image-size 384 --enet-type efficientnet_b3 --use-warmup --init-lr 3e-5 --no-cosine
-
-python train.py --fold 0,1,2 --kernel-type run22 --data-dir ./data/ --data-folder 512 --image-size 384 --enet-type efficientnet_b3 --use-warmup --init-lr 3e-5 --use-amp
-
 # TODO
+
+#python train.py --fold 0,1,2 --kernel-type run20 --data-dir ./data/ --data-folder 512 --image-size 384 --enet-type efficientnet_b3 --use-warmup --init-lr 3e-5 --no-pretraining
+
+#python train.py --fold 0,1,2 --kernel-type run21 --data-dir ./data/ --data-folder 512 --image-size 384 --enet-type efficientnet_b3 --use-warmup --init-lr 3e-5 --no-cosine
+
+#python train.py --fold 0,1,2 --kernel-type run22 --data-dir ./data/ --data-folder 512 --image-size 384 --enet-type efficientnet_b3 --use-warmup --init-lr 3e-5 --use-amp
+
 #python train.py --fold 0,1,2 --kernel-type run12 --data-dir ./data/ --data-folder 512 --image-size 384 --enet-type resnest101 --use-warmup --init-lr 3e-5 
- 
+
 #python train.py --fold 0,1,2 --kernel-type run13 --data-dir ./data/ --data-folder 512 --image-size 384 --enet-type seresnext101 --use-warmup --init-lr 3e-5 
 
+#python train.py --fold 0,1,2 --kernel-type run23 --data-dir ./data/ --data-folder 512 --image-size 384 --enet-type efficientnet_b3 --use-warmup --init-lr 3e-5 --no-augmentation
+#python train.py --fold 0,1,2 --kernel-type run24 --data-dir ./data/ --data-folder 512 --image-size 384 --enet-type efficientnet_b3 --use-warmup --init-lr 3e-5 --num-workers 6
+python train.py --fold 0,1,2 --kernel-type run25-tfb4ns-num-workers6-384 --data-dir ./data/ --data-folder 512 --image-size 384 --enet-type tf_efficientnet_b4_ns --use-warmup --init-lr 3e-5 --num-workers 6
+python train.py --fold 0,1,2 --kernel-type run26-tfb4ns-num-workers6-448 --data-dir ./data/ --data-folder 512 --image-size 448 --enet-type tf_efficientnet_b4_ns --use-warmup --init-lr 3e-5 --num-workers 6
+
+#python train.py --fold 0 --n-epochs 5 --kernel-type benchmark-default-high-b32 --data-dir ./data/ --data-folder 512 --image-size 384 --enet-type efficientnet_b3 --use-warmup --init-lr 3e-5 --compile-mode "default" --mat-mul-precision "high" --batch-size 32
+#python train.py --fold 0 --n-epochs 5 --kernel-type benchmark-reduce-overhead-high-b32 --data-dir ./data/ --data-folder 512 --image-size 384 --enet-type efficientnet_b3 --use-warmup --init-lr 3e-5 --compile-mode "reduce-overhead" --mat-mul-precision "high" --batch-size 32
+#python train.py --fold 0 --n-epochs 5 --kernel-type benchmark-max-autotune-high-b32 --data-dir ./data/ --data-folder 512 --image-size 384 --enet-type efficientnet_b3 --use-warmup --init-lr 3e-5 --compile-mode "max-autotune" --mat-mul-precision "high" --batch-size 32
+#python train.py --fold 0 --n-epochs 5 --kernel-type benchmark-default-high-b32-amp --data-dir ./data/ --data-folder 512 --image-size 384 --enet-type efficientnet_b3 --use-warmup --init-lr 3e-5 --compile-mode "default" --mat-mul-precision "high" --batch-size 32 --use-amp
+#python train.py --fold 0 --n-epochs 5 --kernel-type benchmark-reduce-overhead-high-b32-amp --data-dir ./data/ --data-folder 512 --image-size 384 --enet-type efficientnet_b3 --use-warmup --init-lr 3e-5 --compile-mode "reduce-overhead" --mat-mul-precision "high" --batch-size 32 --use-amp 
+#python train.py --fold 0 --n-epochs 5 --kernel-type benchmark-max-autotune-high-b32-amp --data-dir ./data/ --data-folder 512 --image-size 384 --enet-type efficientnet_b3 --use-warmup --init-lr 3e-5 --compile-mode "max-autotune" --mat-mul-precision "high" --batch-size 32 --use-amp
 
 # ORIGINAL RUNS
 #python train.py --kernel-type 9c_b4ns_2e_896_ext_15ep --data-dir ./data/ --data-folder 1024 --image-size 896 --enet-type tf_efficientnet_b4_ns --init-lr 2e-5 
